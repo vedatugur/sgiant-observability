@@ -1,4 +1,9 @@
-import { createLogger, format, transports, Logger as WinstonLogger } from "winston";
+import {
+  createLogger,
+  format,
+  transports,
+  Logger as WinstonLogger,
+} from "winston";
 
 export function createAppLogger(service: string): WinstonLogger {
   return createLogger({
