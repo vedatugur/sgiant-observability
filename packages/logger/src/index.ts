@@ -69,11 +69,22 @@ const baseOptions: LoggerOptions = {
 };
 
 /**
- * Returns a pino child logger labelled with a service name.
- * Use the same logger across HTTP frameworks (Fastify) and standalone scripts.
+ * Returns a pino child logger labelled for filtering across all apps:
+ *   service   — the app/worker (e.g. "api", "data-booking", "integration-sabee").
+ *               Use the workspace package's short name so it's predictable.
+ *   component — optional finer label within an app (e.g. "contact", "sync-once").
+ *
+ * Filter in Cloud Logging by `jsonPayload.service` (one app),
+ * `jsonPayload.service=~"integration-.*"` (a whole group), or
+ * `jsonPayload.component` (a sub-part). Use the same across Fastify + scripts.
  */
-export function createAppLogger(service: string): PinoLogger {
-  return pino(baseOptions).child({ service });
+export function createAppLogger(
+  service: string,
+  component?: string
+): PinoLogger {
+  return pino(baseOptions).child(
+    component ? { service, component } : { service }
+  );
 }
 
 /**
