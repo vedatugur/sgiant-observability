@@ -1,0 +1,24 @@
+{
+  "name": "@sgiant/telemetry",
+  "version": "1.0.0",
+  "private": true,
+  "main": "./dist/register.js",
+  "exports": {
+    "./register": "./dist/register.js"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/auto-instrumentations-node": "^0.76.0",
+    "@opentelemetry/exporter-trace-otlp-proto": "^0.218.0",
+    "@opentelemetry/sdk-node": "^0.218.0"
+  },
+  "devDependencies": {
+    "@sgiant/tsconfig": "*",
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2"
+  }
+}
