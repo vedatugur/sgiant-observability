@@ -1,8 +1,8 @@
 {
   "name": "@sgiant/telemetry",
   "version": "1.0.0",
-  "private": true,
   "main": "./dist/register.js",
+  "types": "./dist/register.d.ts",
   "exports": {
     "./register": "./dist/register.js"
   },
@@ -20,5 +20,12 @@
     "@sgiant/tsconfig": "*",
     "@types/node": "^22.10.2",
     "typescript": "^5.7.2"
-  }
+  },
+  "publishConfig": {
+    "registry": "https://gitlab.com/api/v4/projects/83055764/packages/npm/",
+    "access": "restricted"
+  },
+  "files": [
+    "dist"
+  ]
 }
