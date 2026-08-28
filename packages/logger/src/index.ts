@@ -1,10 +1,54 @@
 import pino, { Logger as PinoLogger, LoggerOptions } from "pino";
 import { context, trace } from "@opentelemetry/api";
 
-const isDev = process.env.NODE_ENV !== "production";
 const gcpProject = process.env.GOOGLE_CLOUD_PROJECT;
-const environment =
-  process.env.SGIANT_ENV ?? process.env.NODE_ENV ?? "development";
+
+/**
+ * The deployed environment, resolved from the first of THREE names that is set.
+ * Three, because two provisioning paths write two different names and this file
+ * knew only one of them:
+ *
+ *   - `SGIANT_ENV` — the app VM. A key in infra/env-profiles/manifest.mjs, so
+ *     every generated app-env carries it.
+ *   - `APP_ENV`    — the AGENT VM. provision-agent-vm.sh:167 writes it, and that
+ *     box's env file is NOT generated from the manifest, so `SGIANT_ENV` is
+ *     never set there.
+ *   - `NODE_ENV`   — the local fallback.
+ *
+ * Measured on the prod agent VM, 2026-08-28 (#282): every journal line read
+ * `environment: "development"` while the gateway's own config, on that SAME
+ * line, read `env: "prod"`. apps/agent-gateway/src/config.ts already resolved
+ * `APP_ENV`; this file did not, so one process disagreed with itself. Anyone
+ * filtering logs by environment looked for prod lines in the dev bucket.
+ */
+export function resolveEnvironment(
+  env: NodeJS.ProcessEnv = process.env
+): string {
+  return env.SGIANT_ENV ?? env.APP_ENV ?? env.NODE_ENV ?? "development";
+}
+
+const environment = resolveEnvironment();
+
+/**
+ * Pretty-printing is for a human at a terminal, and it was silently ON in prod
+ * on the agent VM — the same root cause, and the more expensive half. `NODE_ENV`
+ * is unset on that box, so `!== "production"` was true, and pino-pretty replaced
+ * the structured JSON with colourised text. Those prod lines reached Cloud
+ * Logging with no parseable `severity` and no queryable fields at all: the
+ * formatter below carefully emits GCP severity, and the transport then threw it
+ * away.
+ *
+ * The `NODE_ENV` test is KEPT rather than replaced so this stays a strict
+ * narrowing: every environment that already set `NODE_ENV` behaves exactly as
+ * before (a dev container with `NODE_ENV=production` keeps its JSON logs). The
+ * added clause only catches the case that had no answer — `NODE_ENV` unset on a
+ * box that `APP_ENV` says is prod.
+ */
+export function resolvePretty(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.NODE_ENV !== "production" && resolveEnvironment(env) !== "prod";
+}
+
+const isDev = resolvePretty();
 
 // pino level → Google Cloud Logging severity. Emitting `severity` lets Logs
 // Explorer filter by level the same way across every app.
