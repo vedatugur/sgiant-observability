@@ -1,8 +1,19 @@
 /**
  * Shared OpenTelemetry bootstrap for every backend Node service (API + workers).
  *
+ * THIS FILE MUST NOT IMPORT `./index`, AND `./index` MUST NOT IMPORT THIS FILE.
+ * `#328` merged the logger and the tracer into one package, which is right —
+ * they are one concern — but it put the two halves within an import of each
+ * other for the first time. The auto-instrumentations patch pino by
+ * intercepting its module load, so pino must not be loaded until after
+ * `sdk.start()`. One import in either direction would load it first, and the
+ * only symptom would be log lines that quietly stop carrying trace ids: nothing
+ * crashes, nothing warns, and the correlation this package exists to provide is
+ * simply gone. `tests/unit/observability-entry-points.test.ts` asserts the two
+ * files stay disjoint.
+ *
  * Load it FIRST, before the app imports http/fastify/pg, via:
- *   NODE_OPTIONS="--require /repo/packages/telemetry/dist/register.js"
+ *   NODE_OPTIONS="--require /repo/packages/observability/dist/register.js"
  * (set per service in infra/docker/compose.yaml). Each service sets its own
  * OTEL_SERVICE_NAME so traces are attributable per app.
  *
@@ -11,7 +22,7 @@
  * this is a no-op — the service runs without telemetry.
  *
  * Trace↔log correlation is automatic: instrumentation-pino stamps trace ids on
- * each log line and @sgiant/logger adds Google Cloud's trace field on top.
+ * each log line and @sgiant/observability adds Google Cloud's trace field on top.
  */
 import { NodeSDK } from "@opentelemetry/sdk-node";
 import { getNodeAutoInstrumentations } from "@opentelemetry/auto-instrumentations-node";

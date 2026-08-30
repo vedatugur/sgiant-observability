@@ -1,3 +1,10 @@
+/**
+ * The logging half of `@sgiant/observability` — the `.` entry point.
+ *
+ * Do NOT import `./register` from here. See the comment at the top of that file:
+ * it has to run before pino is loaded, and an import from this side would defeat
+ * it silently. `tests/unit/observability-entry-points.test.ts` enforces it.
+ */
 import pino, { Logger as PinoLogger, LoggerOptions } from "pino";
 import { context, trace } from "@opentelemetry/api";
 
