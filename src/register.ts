@@ -1,29 +1,25 @@
 /**
- * Shared OpenTelemetry bootstrap for every backend Node service (API + workers).
+ * OpenTelemetry bootstrap for a Node service. Side effect only — no exports.
  *
- * THIS FILE MUST NOT IMPORT `./index`, AND `./index` MUST NOT IMPORT THIS FILE.
- * `#328` merged the logger and the tracer into one package, which is right —
- * they are one concern — but it put the two halves within an import of each
- * other for the first time. The auto-instrumentations patch pino by
- * intercepting its module load, so pino must not be loaded until after
- * `sdk.start()`. One import in either direction would load it first, and the
- * only symptom would be log lines that quietly stop carrying trace ids: nothing
- * crashes, nothing warns, and the correlation this package exists to provide is
- * simply gone. `tests/unit/observability-entry-points.test.ts` asserts the two
- * files stay disjoint.
+ * Load it FIRST, before the app imports http/fastify/pg, or the
+ * auto-instrumentations have nothing to patch:
  *
- * Load it FIRST, before the app imports http/fastify/pg, via:
- *   NODE_OPTIONS="--require /repo/packages/observability/dist/register.js"
- * (set per service in infra/docker/compose.yaml). Each service sets its own
- * OTEL_SERVICE_NAME so traces are attributable per app.
+ *   NODE_OPTIONS="--require sgiant-observability/register"
  *
- * Exports OTLP traces to the in-stack OTel Collector (OTEL_EXPORTER_OTLP_ENDPOINT),
- * which forwards to Google Cloud Trace. If the endpoint is unset (local dev),
- * this is a no-op — the service runs without telemetry.
+ * Set `OTEL_SERVICE_NAME` per service so traces are attributable, and
+ * `OTEL_EXPORTER_OTLP_ENDPOINT` to your collector. With the endpoint unset this
+ * is a no-op and the service runs untraced — which is the intended local
+ * default, not a failure.
  *
- * Trace↔log correlation is automatic: instrumentation-pino stamps trace ids on
- * each log line and sgiant-observability adds Google Cloud's trace field on top.
+ * Never import `./index` from here, or this file from `./index`. The
+ * auto-instrumentations patch pino by intercepting its module load, so pino
+ * must not load until after `sdk.start()`. One import in either direction loads
+ * it first, and the only symptom is log lines that quietly stop carrying trace
+ * ids: nothing crashes and nothing warns.
+ *
+ * Init failures are swallowed — telemetry must never take a service down.
  */
+
 import { NodeSDK } from "@opentelemetry/sdk-node";
 import { getNodeAutoInstrumentations } from "@opentelemetry/auto-instrumentations-node";
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-proto";
