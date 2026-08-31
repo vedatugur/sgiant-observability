@@ -22,7 +22,7 @@
  * this is a no-op — the service runs without telemetry.
  *
  * Trace↔log correlation is automatic: instrumentation-pino stamps trace ids on
- * each log line and @sgiant/observability adds Google Cloud's trace field on top.
+ * each log line and sgiant-observability adds Google Cloud's trace field on top.
  */
 import { NodeSDK } from "@opentelemetry/sdk-node";
 import { getNodeAutoInstrumentations } from "@opentelemetry/auto-instrumentations-node";

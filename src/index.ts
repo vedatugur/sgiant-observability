@@ -1,5 +1,5 @@
 /**
- * The logging half of `@sgiant/observability` — the `.` entry point.
+ * The logging half of `sgiant-observability` — the `.` entry point.
  *
  * Do NOT import `./register` from here. See the comment at the top of that file:
  * it has to run before pino is loaded, and an import from this side would defeat
