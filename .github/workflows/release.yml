@@ -1,0 +1,52 @@
+name: release
+
+# Tag-driven, and deliberately not push-driven. A published version number can
+# never be reused and `npm unpublish` is not an undo, so releasing is an
+# explicit act: `git tag v1.1.0 && git push --tags`.
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Required for npm provenance: npm verifies the package really was built
+      # by this workflow, from this repo, at this commit.
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm test
+
+      # The tag IS the version claim, so disagreeing with package.json means one
+      # of the two is wrong and neither should be guessed at.
+      - name: the tag matches the manifest version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pkg="$(node -p "require('./package.json').version")"
+          if [ "$tag" != "$pkg" ]; then
+            echo "REFUSING: tag v$tag but package.json says $pkg"
+            exit 1
+          fi
+          echo "publishing $pkg"
+
+      # Same audit as ci.yml, run again here because this is the one job whose
+      # mistakes cannot be taken back.
+      - name: audit the tarball
+        run: |
+          npm pack --pack-destination /tmp >/dev/null
+          tar xzf /tmp/*.tgz -C /tmp
+          ./scripts/audit-tarball.sh /tmp/package
+
+      - run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

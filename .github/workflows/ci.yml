@@ -1,0 +1,46 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      # The package declares engines.node >=20. Testing only on the newest would
+      # let a syntax or API that does not exist on 20 through, and the failure
+      # would land on whoever installs it, not here.
+      matrix:
+        node: [20, 22, 24]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm test
+
+  # What a consumer actually receives. `files: ["dist"]` does NOT settle this:
+  # tsc compiles source comments into dist/*.js, and JSDoc on an export lands in
+  # dist/*.d.ts where an editor shows it on hover. This package shipped internal
+  # host names, file paths and an incident write-up that way before anyone
+  # looked, so the tarball is inspected rather than assumed.
+  tarball:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npm run build
+
+      - name: audit the tarball
+        run: |
+          npm pack --pack-destination /tmp >/dev/null
+          tar xzf /tmp/*.tgz -C /tmp
+          ./scripts/audit-tarball.sh /tmp/package
