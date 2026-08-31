@@ -22,6 +22,9 @@ jobs:
           node-version: 20
           registry-url: https://registry.npmjs.org
 
+      # Trusted publishing needs npm >= 11.5.1; setup-node's Node 20 ships 10.x.
+      - run: npm install -g npm@latest
+
       - run: npm ci
       - run: npm run typecheck
       - run: npm run build
@@ -47,6 +50,18 @@ jobs:
           tar xzf /tmp/*.tgz -C /tmp
           ./scripts/audit-tarball.sh /tmp/package
 
+      # NO TOKEN. The job proves its identity to npm over OIDC — npm is told,
+      # once, that this repo and this workflow file may publish this package,
+      # and the short-lived id-token above is the whole credential.
+      #
+      # This replaced an NPM_TOKEN secret deliberately. npm is deprecating the
+      # 2FA-bypass tokens that automation used to need ("npm tokens that bypass
+      # 2FA are being restricted for account changes and direct publishing"),
+      # and a long-lived token in a secret is a thing that can leak, expire
+      # silently, or outlive the person who made it. This cannot: there is
+      # nothing stored to steal.
+      #
+      # Requires trusted publishing to be configured for the package on
+      # npmjs.com, naming this repository and this workflow filename. Until it
+      # is, this step fails loudly rather than publishing anything wrong.
       - run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
