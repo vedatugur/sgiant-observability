@@ -3,6 +3,10 @@ name: release
 # Tag-driven, and deliberately not push-driven. A published version number can
 # never be reused and `npm unpublish` is not an undo, so releasing is an
 # explicit act: `git tag v1.1.0 && git push --tags`.
+#
+# The tag has to be on main: one of the commits main itself has pointed at. The
+# job refuses, before it installs anything, a tag that is anywhere else; and
+# before it publishes, a tag whose name is not the version in package.json.
 on:
   push:
     tags: ["v*"]
@@ -19,6 +23,40 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v7
+        with:
+          # All of history, not the default single commit: the next step asks
+          # whether this commit is on main, and one commit cannot answer that.
+          fetch-depth: 0
+
+      # THE TAG MUST BE ON MAIN.
+      #
+      # Everything below checks the tag's NAME against package.json and nothing
+      # about WHERE the tag is. A v* tag on a branch, or on a commit that was
+      # never merged, would build, pass and publish code that main does not
+      # have, under a number that can never be used again. Here, before
+      # anything is installed or built, so a misplaced tag costs seconds and
+      # spends nothing: delete it, tag main, push again.
+      #
+      # ON MAIN'S OWN LINE, not merely in its history. This repository
+      # squashes today, and a real merge commit is one click away.
+      # A commit of a branch that was merged that way is an ancestor of main
+      # and was still never main: its tree is the branch's. So the tag has to
+      # be one of the commits main itself has pointed at (its first-parent
+      # line). For a squashed commit the two are the same thing.
+      #
+      # main is fetched explicitly rather than trusted from the checkout, so the
+      # answer is about main as it is now. The list goes to a file because
+      # `rev-list | grep -q` fails under pipefail the moment grep finds its line.
+      - name: tagged commit is on main
+        run: |
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          git rev-list --first-parent origin/main > "${RUNNER_TEMP:-/tmp}/main-line"
+          if ! grep -qx "$(git rev-parse HEAD)" "${RUNNER_TEMP:-/tmp}/main-line"; then
+            echo "REFUSING: $GITHUB_REF_NAME is $(git rev-parse --short HEAD), which is not a commit of main"
+            exit 1
+          fi
+          echo "$GITHUB_REF_NAME is $(git rev-parse --short HEAD), on main"
+
       # v6, not v7, on purpose. v7 stops exporting the placeholder
       # NODE_AUTH_TOKEN that the .npmrc written here still refers to, which
       # changes what npm sees at publish time — and the only way to test that is
