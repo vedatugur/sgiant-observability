@@ -29,7 +29,11 @@ jobs:
           registry-url: https://registry.npmjs.org
 
       # Trusted publishing needs npm >= 11.5.1; setup-node's Node 20 ships 10.x.
-      - run: npm install -g npm@latest
+      #
+      # Pinned, not `latest`. `latest` became npm 12, which refuses to run on
+      # Node 20 at all — so this job would have died here on its next tag,
+      # looking like a broken runner rather than a version that moved under it.
+      - run: npm install -g npm@11.5.1
 
       - run: npm ci
       - run: npm run typecheck
