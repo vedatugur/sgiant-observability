@@ -71,6 +71,48 @@ too late.
 The failure is silent, which is why it is worth stating twice: nothing crashes
 and nothing warns. Your logs simply stop carrying trace ids.
 
+#### Stopping: who ends the process
+
+What the preload does on `SIGTERM` and `SIGINT` depends on your application:
+
+- **Your application has no handler of its own for the signal.** The preload
+  shuts telemetry down, which flushes it, and exits `0`. Nothing for you to do.
+- **Your application has its own graceful shutdown.** The preload does
+  **nothing at all** on the signal: it neither exits nor shuts telemetry down,
+  so telemetry keeps recording while your application finishes its work. Your
+  handler ends the process when that work is done, and calls
+  `flushTelemetry()` just before it does:
+
+  ```ts
+  import { flushTelemetry } from "sgiant-observability";
+
+  process.on("SIGTERM", async () => {
+    await server.close(); // your own shutdown: finish the work in hand
+    await flushTelemetry(); // then telemetry
+    process.exit(0);
+  });
+  ```
+
+Up to 1.1.0 the preload exited in both cases; 2.0.0 is a major version because it no longer does. Signal handlers do not take
+turns, so it ended the process a few milliseconds into the application's own
+shutdown, whatever that shutdown was waiting for.
+
+"Has a handler" is judged when the signal arrives. An application signalled
+during start-up, before it has registered one, is ended by the preload.
+
+The preload has no timer. If your handler never ends the process, your
+supervisor's stop timeout does (a container's stop grace period, a service
+manager's `TimeoutStopSec`).
+
+`flushTelemetry()` never rejects and never keeps the process alive. It resolves
+`"flushed"`, `"timed_out"` after two seconds (`TELEMETRY_FLUSH_LIMIT_MS`; pass
+another limit as its argument), or `"not_running"` when there is no collector
+address or the preload is not loaded. A flush that fails is reported on stderr
+by the error's class name only.
+
+To test any of this, set `OTEL_EXPORTER_OTLP_ENDPOINT`. Without it the preload
+does nothing at all, and a shutdown test passes for the wrong reason.
+
 ## Configuration
 
 Everything is read from the environment. Nothing is required.
@@ -95,6 +137,8 @@ createAppLogger(service: string, component?: string): Logger
 loggerOptions: pino.LoggerOptions
 resolveEnvironment(env?: NodeJS.ProcessEnv): string
 resolvePretty(env?: NodeJS.ProcessEnv): boolean
+flushTelemetry(limitMs?: number): Promise<"flushed" | "timed_out" | "not_running">
+TELEMETRY_FLUSH_LIMIT_MS: number // 2000
 type Logger = pino.Logger
 ```
 

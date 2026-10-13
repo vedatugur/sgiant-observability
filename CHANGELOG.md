@@ -1,5 +1,55 @@
 # Changelog
 
+## 2.0.0
+
+**BREAKING: if your application has its own `SIGTERM` or `SIGINT` handler, the
+preload no longer exits the process for you. Your handler must end it.** A
+handler that only logged, or closed something, and relied on this package to
+exit, will now run until its supervisor's stop timeout. Call
+`flushTelemetry()` and then `process.exit()` at the end of it. An application
+with NO handler of its own is unaffected.
+
+This is a major version for that reason alone: a range such as `^1.1.0` must
+not deliver it unasked.
+
+### Changed
+
+- **The preload no longer ends a process that has its own graceful shutdown.**
+  On `SIGTERM` and `SIGINT` it shut telemetry down and called
+  `process.exit(0)`, always. Signal handlers do not take turns, and the preload
+  registers first: an application that had started waiting for its in-flight
+  work was ended a few milliseconds later, by its telemetry library. Nothing
+  crashed and the exit code was `0`, so it read as a clean stop.
+
+  The preload now exits only when the application has **no** handler of its
+  own for the signal. When it has one, the application ends the process.
+  This is judged when the signal arrives, so an application signalled during
+  start-up, before it registered a handler, is still ended promptly.
+
+  An application whose handler already ends the process (most do: that is
+  what the handler is for) needs no change beyond, optionally, the flush
+  below. An application with no handler behaves exactly as before.
+
+### Added
+
+- **`flushTelemetry(limitMs?)`**, from the main entry. Call it last in your own
+  shutdown handler, before `process.exit()`, so spans still buffered are sent.
+  It never rejects and never keeps the process alive: it resolves `"flushed"`,
+  `"timed_out"` after `TELEMETRY_FLUSH_LIMIT_MS` (two seconds), or
+  `"not_running"`. A flush that fails is reported by the error's class name
+  only; an error's message can carry a collector address.
+
+### Notes
+
+- The preload has **no timer of its own**. If an application's handler never
+  ends the process, the supervisor's stop timeout is the backstop. A timer
+  here would be a second place that can cut a shutdown short.
+- **Why no test found this:** the preload does nothing unless
+  `OTEL_EXPORTER_OTLP_ENDPOINT` is set, so a process started with the preload
+  and no collector address stops perfectly. The new tests start a real process
+  with both, as a deployment does. One of them asserts the inert case too, so
+  the trap is written down where the next test will be written.
+
 ## 1.1.0
 
 `logger` and `telemetry` became one package, `sgiant-observability`. Logging and

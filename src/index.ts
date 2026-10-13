@@ -148,3 +148,75 @@ export function createAppLogger(
 export const loggerOptions = baseOptions;
 
 export type Logger = PinoLogger;
+
+/** How long `flushTelemetry()` waits before it gives up, in milliseconds. */
+export const TELEMETRY_FLUSH_LIMIT_MS = 2000;
+
+/**
+ * What a flush came to:
+ *
+ * - `"flushed"`: telemetry was shut down and what it held was sent, or the
+ *   attempt to send it failed (a failure is reported by the bootstrap, by its
+ *   kind, and is not a reason to wait);
+ * - `"timed_out"`: it did not finish within the limit;
+ * - `"not_running"`: the bootstrap is not loaded or has no collector address,
+ *   so there was nothing to flush.
+ */
+export type TelemetryFlush = "flushed" | "timed_out" | "not_running";
+
+/**
+ * Flush telemetry before the process exits. Call it LAST in an application's
+ * own SIGTERM / SIGINT handler, after its in-flight work is done:
+ *
+ * ```ts
+ * process.on("SIGTERM", async () => {
+ *   await server.close();          // the application's own shutdown
+ *   await flushTelemetry();        // then telemetry
+ *   process.exit(0);
+ * });
+ * ```
+ *
+ * An application that registers a handler for a signal is the one that ends
+ * the process: the bootstrap (`sgiant-observability/register`) then leaves
+ * the signal alone, so that it cannot end the process in the middle of the
+ * application's shutdown. This is the other half of that: without it, spans
+ * still buffered when the process exits are lost.
+ *
+ * It NEVER rejects and NEVER keeps the process alive: it resolves when the
+ * flush is done or when `limitMs` has passed, whichever is first, and its
+ * timer does not hold the event loop open. After it resolves, telemetry is
+ * shut down; spans created later are not recorded.
+ *
+ * @param limitMs - The longest to wait. Defaults to
+ *   {@link TELEMETRY_FLUSH_LIMIT_MS}.
+ */
+export async function flushTelemetry(
+  limitMs: number = TELEMETRY_FLUSH_LIMIT_MS
+): Promise<TelemetryFlush> {
+  const end = (globalThis as Record<symbol, unknown>)[
+    Symbol.for("sgiant-observability.flush")
+  ];
+  if (typeof end !== "function") return "not_running";
+  let timer: NodeJS.Timeout | undefined;
+  const limit = new Promise<TelemetryFlush>((resolve) => {
+    timer = setTimeout(() => resolve("timed_out"), limitMs);
+    timer.unref();
+  });
+  const flushed = Promise.resolve()
+    .then(() => (end as () => unknown)())
+    .then(
+      (): TelemetryFlush => "flushed",
+      (err: unknown): TelemetryFlush => {
+        // By kind, never the message: it can carry an address or a header.
+        console.error(
+          `[telemetry] flush failed (${err instanceof Error ? err.name : typeof err}); the process is not held for it`
+        );
+        return "flushed";
+      }
+    );
+  try {
+    return await Promise.race([flushed, limit]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
