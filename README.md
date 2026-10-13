@@ -73,13 +73,14 @@ and nothing warns. Your logs simply stop carrying trace ids.
 
 #### Stopping: who ends the process
 
-On `SIGTERM` and `SIGINT` the preload shuts telemetry down, which flushes it.
-Whether it then **exits** depends on your application:
+What the preload does on `SIGTERM` and `SIGINT` depends on your application:
 
 - **Your application has no handler of its own for the signal.** The preload
-  flushes and exits `0`. Nothing for you to do.
-- **Your application has its own graceful shutdown.** The preload leaves the
-  signal alone. Your handler ends the process when its work is done, and calls
+  shuts telemetry down, which flushes it, and exits `0`. Nothing for you to do.
+- **Your application has its own graceful shutdown.** The preload does
+  **nothing at all** on the signal: it neither exits nor shuts telemetry down,
+  so telemetry keeps recording while your application finishes its work. Your
+  handler ends the process when that work is done, and calls
   `flushTelemetry()` just before it does:
 
   ```ts
